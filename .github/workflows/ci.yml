@@ -1,0 +1,87 @@
+name: certval-yubikey
+
+on:
+  pull_request:
+  push:
+    branches: main
+  # Manual re-runs via `gh workflow run ci.yml` (available once this file is
+  # on the default branch).
+  workflow_dispatch:
+
+env:
+  CARGO_INCREMENTAL: 0
+  RUSTFLAGS: "-Dwarnings"
+
+# Cancels CI jobs when new commits are pushed to a PR branch
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+# --locked everywhere: Cargo.lock is checked in, and a run that re-resolved it would test
+# dependencies the repository does not pin. No job reaches a YubiKey: the runners have none, so CI
+# covers the build and the encoding done on the host, and the card itself is tested by hand.
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        # The yubikey crate talks to the card through PC/SC, which is the system's on macOS and
+        # Windows and pcsc-lite on Linux.
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
+        rust:
+          - 1.89.0 # MSRV
+          - stable
+    steps:
+      - uses: actions/checkout@v7
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libpcsclite-dev
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust }}
+      - run: cargo build --locked --all-targets
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: sudo apt-get update && sudo apt-get install -y libpcsclite-dev
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo test --locked
+
+  # Lints run on stable only, deliberately not across the build matrix: clippy's diagnostics differ
+  # between toolchains, so linting against the MSRV pin reports on a compiler nobody develops with.
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: sudo apt-get update && sudo apt-get install -y libpcsclite-dev
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          # Not installed by default.
+          components: clippy
+      - run: cargo clippy --locked --all-targets
+
+  # A job of its own so it can be a required check without making clippy one: each Rust release
+  # adds lints, and a required clippy would fail unrelated pull requests.
+  rustfmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          # Not installed by default.
+          components: rustfmt
+      - run: cargo fmt --check
+
+  doc:
+    runs-on: ubuntu-latest
+    env:
+      RUSTDOCFLAGS: "-D warnings"
+    steps:
+      - uses: actions/checkout@v7
+      - run: sudo apt-get update && sudo apt-get install -y libpcsclite-dev
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo doc --locked --no-deps

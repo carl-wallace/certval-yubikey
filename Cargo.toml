@@ -1,0 +1,42 @@
+[package]
+name = "certval-yubikey"
+version = "0.1.0-rc.1"
+description = """
+YubiKey PIV credentials for certval-cms: keys on a YubiKey sign CMS SignedData and decrypt CMS
+EnvelopedData, with the certificates in the card's slots identifying them.
+"""
+license = "Apache-2.0 OR MIT"
+repository = "https://github.com/carl-wallace/certval-yubikey"
+categories = ["cryptography"]
+keywords = ["yubikey", "piv", "cms", "certval"]
+readme = "README.md"
+edition = "2021"
+rust-version = "1.89"
+include = ["src/**/*.rs", "README.md", "CHANGELOG.md", "LICENSE-APACHE", "LICENSE-MIT"]
+
+[dependencies]
+certval-cms = "0.1.0-rc.2"
+# Upstream main at #685 (rsa 0.10.0). The published 0.9.0-rc.0 asks rsa 0.10 for a `sha2` feature
+# the 0.10.0 release no longer has, so it cannot be built beside certval-cms. Back to a crates.io
+# version once one with #685 is released; until then this crate cannot be published.
+yubikey = { git = "https://github.com/iqlusioninc/yubikey.rs.git", rev = "a661d953" }
+
+cms = "=0.3.0-rc.2"
+const-oid = { version = "0.10.2", features = ["db"] }
+der = { version = "0.8.3", features = ["alloc", "derive", "oid"] }
+log = "0.4.33"
+spki = "0.8.0"
+x509-cert = { version = "0.3.0", default-features = false }
+zeroize = "1.8.1"
+
+[dev-dependencies]
+# certval's software RSA, which verifies what the card signs. A dev-dependency, so the application,
+# not this crate, decides which algorithms certval's software offers.
+certval = { version = "0.2.0-rc.3", default-features = false, features = ["rsa"] }
+# Trust anchors and CA certificates for validating the card's certificates: the Purebred development
+# PKI, which issues the test cards' certificates.
+certval_stores_core = "0.1.0-rc.1"
+certval_stores_pbdev = "1.0.0-rc.1"
+# The random number generator certval-cms's builders take.
+getrandom = { version = "0.4.1", features = ["sys_rng"] }
+rand_core = "0.10.1"
